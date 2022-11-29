@@ -6,14 +6,12 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"os"
 	"os/exec"
 	"regexp"
 	"strings"
 	"time"
-
 	"github.com/checksum0/go-electrum/electrum"
 	"github.com/gin-gonic/gin"
 )
@@ -194,17 +192,6 @@ func publishMediaIPFS(server *electrum.Server, c *gin.Context, paymentAddr strin
 					"error":   true,
 				})
 				return
-			}
-
-			// Also add it to Infura to make it available faster.
-			file, err := os.Open(cidFilename)
-			if err == nil {
-				reader := bufio.NewReader(file)
-				_, err = addFileToInfura(reader)
-				if err != nil {
-					log.Printf("Failed to add file to Infura: %v\n", err)
-				}
-				file.Close()
 			}
 		}
 	}

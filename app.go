@@ -6,7 +6,6 @@ import (
 	"os"
 	"strconv"
 	"time"
-
 	"github.com/checksum0/go-electrum/electrum"
 	"github.com/gin-gonic/gin"
 )
