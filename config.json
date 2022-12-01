@@ -1,0 +1,10 @@
+{
+    "Electrum_host": "127.0.0.1",
+	"Electrum_port": 50001,
+	"Min_payment": 5.0,
+	"Payment_address": "VRtbccHd8U6DgvDPgtX56ZsB8XiF49f9Qp",
+	"Tls_enabled": false,
+	"Tls_key": "",
+	"Tls_cert": "",
+    "Debug": false
+}

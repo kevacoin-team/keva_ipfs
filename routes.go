@@ -16,10 +16,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-const (
-	sessionKey = "session"
-)
-
 func getPaymentInfo(c *gin.Context, paymentAddr string, minPayment float64) {
 	paymentInfo := PaymentInfo{
 		PaymentAddress: paymentAddr,

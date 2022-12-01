@@ -52,6 +52,7 @@ func createBody(t *testing.T, fileName string, title, mediaType string) (body *b
 }
 
 func TestIPFS(t *testing.T) {
+	loadConfig(&cfg)
 	ts := httptest.NewServer(setupServer())
 	defer ts.Close()
 

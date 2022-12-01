@@ -2,43 +2,74 @@ package main
 
 import (
 	"crypto/tls"
+	"encoding/json"
 	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 	"github.com/checksum0/go-electrum/electrum"
 	"github.com/gin-gonic/gin"
 )
 
-func setupServer(port string, isSSL bool) *gin.Engine {
+var cfg ServerConfig
 
-	paymentAddress := os.Getenv("KEVA_PAYMENT_ADDRESS")
-	minPayment := os.Getenv("KEVA_MIN_PAYMENT")
+func loadConfig(cfg *ServerConfig) {
+	configFileName := "config.json"
+	configFileName, _ = filepath.Abs(configFileName)
+	log.Printf("Loading config: %v", configFileName)
+	configFile, err := os.Open(configFileName)
 
-	if len(paymentAddress) == 0 || len(minPayment) == 0 {
-		log.Fatalln("Environment variable KEVA_PAYMENT_ADDRESS and KEVA_MIN_PAYMENT required.")
-	}
-
-	minPaymentVal, err := strconv.ParseFloat(minPayment, 64)
 	if err != nil {
-		log.Fatalln("Invalid minimal payment value.")
+		log.Fatal("File error: ", err.Error())
+	}
+	defer configFile.Close()
+	jsonParser := json.NewDecoder(configFile)
+	if err = jsonParser.Decode(&cfg); err != nil {
+		log.Fatal("Config error: ", err.Error())
 	}
 
-	electrumHost := os.Getenv("KEVA_ELECTRUM_HOST")
-	if len(electrumHost) == 0 {
-		log.Fatalln("Environment variable KEVA_ELECTRUM_HOST required.")
+	log.Printf("- config Payment address: %v", cfg.Payment_address)
+	if len(cfg.Payment_address) == 0 {
+		log.Fatalln("Config variable Payment_address required.")
 	}
 
+	log.Printf("- config Min_payment: %v", cfg.Min_payment)
+	if cfg.Min_payment < 0 {
+		log.Fatalln("Invalid config variable Min_payment value.")
+	}
+
+	log.Printf("- config Electrum_port: %v", cfg.Electrum_port)
+	if len(cfg.Electrum_host) == 0 {
+		log.Fatalln("Config variable Electrum_host required.")
+	}
+
+	log.Printf("- config Electrum_host: %v", cfg.Electrum_host)
+	if cfg.Electrum_port == 0 || cfg.Electrum_port < 0 {
+		log.Fatalln("Config variable Electrum_port required.")
+	}
+
+	log.Printf("- config Tls_enabled: %v", cfg.Tls_enabled)
+	if cfg.Tls_enabled == true {
+		if len(cfg.Tls_cert) == 0 || len(cfg.Tls_key) == 0 {
+			log.Fatalln("Config variables Tls_cert and Tls_key required.")
+		}
+	}
+}
+
+func setupServer() *gin.Engine {
+	var err error = nil
 	electrumServer := electrum.NewServer()
+	portStr := strconv.Itoa(cfg.Electrum_port)
 
-	if isSSL {
+	if cfg.Tls_enabled {
 		conf := &tls.Config{}
-		if err = electrumServer.ConnectSSL(electrumHost+":"+port, conf); err != nil {
-			log.Fatal(err)
+		if err = electrumServer.ConnectSSL(cfg.Electrum_host + ":" + portStr, conf); err != nil {
+			log.Fatal("Electrum connection error: ", err)
 		}
 	} else {
-		if err = electrumServer.ConnectTCP(electrumHost + ":" + port); err != nil {
-			log.Fatal(err)
+		if err = electrumServer.ConnectTCP(cfg.Electrum_host + ":" + portStr); err != nil {
+			log.Fatal("Electrum connection error: ", err)
 		}
 	}
 
@@ -46,7 +77,7 @@ func setupServer(port string, isSSL bool) *gin.Engine {
 	go func() {
 		for {
 			if err = electrumServer.Ping(); err != nil {
-				log.Println(err)
+				log.Fatal("Electrum keep alive error: ", err)
 			}
 			time.Sleep(60 * time.Second)
 		}
@@ -57,7 +88,7 @@ func setupServer(port string, isSSL bool) *gin.Engine {
 	{
 		// Get payment info
 		v1.GET("/payment_info", func(c *gin.Context) {
-			getPaymentInfo(c, paymentAddress, minPaymentVal)
+			getPaymentInfo(c, cfg.Payment_address, cfg.Min_payment)
 		})
 
 		// Upload media
@@ -67,7 +98,7 @@ func setupServer(port string, isSSL bool) *gin.Engine {
 
 		// Add to IPFS
 		v1.POST("/pin", func(c *gin.Context) {
-			publishMediaIPFS(electrumServer, c, paymentAddress, minPaymentVal)
+			publishMediaIPFS(electrumServer, c, cfg.Payment_address, cfg.Min_payment)
 		})
 	}
 
@@ -75,42 +106,21 @@ func setupServer(port string, isSSL bool) *gin.Engine {
 }
 
 func main() {
-	portSSLStr := os.Getenv("KEVA_ELECTRUM_SSL_PORT")
-	portTCPStr := os.Getenv("KEVA_ELECTRUM_TCP_PORT")
-	if len(portSSLStr) == 0 && len(portTCPStr) == 0 {
-		log.Fatalln("Either KEVA_ELECTRUM_SSL_PORT or KEVA_ELECTRUM_TCP_PORT must be set.")
-	}
-	var port int
 	var router *gin.Engine
-	if len(portSSLStr) > 0 {
-		router = setupServer(portSSLStr, true)
-		port, _ = strconv.Atoi(portSSLStr)
-	} else {
-		router = setupServer(portTCPStr, false)
-		port, _ = strconv.Atoi(portTCPStr)
-	}
+	// Setting gin to release mode; comment to use environment variable or systems default
+	gin.SetMode(gin.ReleaseMode)
+
+	loadConfig(&cfg)
+	router = setupServer()
 	// The port used by the server is the eletrumx port plus 10.
-	port += 10
+	portStr := strconv.Itoa(cfg.Electrum_port + 10)
 
-	tlsEnabled := 0
-	tlsEnabled, _ = strconv.Atoi(os.Getenv("KEVA_TLS_ENABLED"))
-	if tlsEnabled != 0 {
+	if cfg.Tls_enabled == true {
 		log.Println("Using TLS/SSL")
+		router.RunTLS(":" + portStr, cfg.Tls_cert, cfg.Tls_key)
 	} else {
-		log.Println("**Warning: TLS/SSL not enabled. Set KEVA_TLS_ENABLED to 1 to enable TLS/SSL.")
-	}
-
-	portStr := strconv.Itoa(port)
-	if tlsEnabled != 0 {
-		serverCert := os.Getenv("KEVA_TLS_CERT")
-		serverKey := os.Getenv("KEVA_TLS_KEY")
-		if len(serverCert) == 0 || len(serverKey) == 0 {
-			log.Fatalln("Environment variables KEVA_TLS_CERT and KEVA_TLS_KEY required.")
-		}
-		log.Printf("Listen to port: " + portStr)
-		router.RunTLS(":"+portStr, serverCert, serverKey)
-	} else {
-		log.Printf("Listen to port: " + portStr)
+		log.Println("**Warning: TLS/SSL not enabled. Set tls_enabled to true to enable TLS/SSL.")
 		router.Run(":" + portStr)
 	}
+	log.Println("Listening on port: " + portStr)
 }
