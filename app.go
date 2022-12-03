@@ -107,6 +107,16 @@ func setupServer() *gin.Engine {
 
 func main() {
 	var router *gin.Engine
+
+	// Setting log file
+	file, err := os.OpenFile("debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	defer file.Close()
+	log.SetOutput(file)
+
 	// Setting gin to release mode; comment to use environment variable or systems default
 	gin.SetMode(gin.ReleaseMode)
 
