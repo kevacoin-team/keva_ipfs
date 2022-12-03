@@ -17,43 +17,45 @@ var cfg ServerConfig
 func loadConfig(cfg *ServerConfig) {
 	configFileName := "config.json"
 	configFileName, _ = filepath.Abs(configFileName)
-	log.Printf("Loading config: %v", configFileName)
+	log.Println("Loading config: ", configFileName)
 	configFile, err := os.Open(configFileName)
 
 	if err != nil {
-		log.Fatal("File error: ", err.Error())
+		log.Fatalln("File error: ", err.Error())
 	}
 	defer configFile.Close()
 	jsonParser := json.NewDecoder(configFile)
 	if err = jsonParser.Decode(&cfg); err != nil {
-		log.Fatal("Config error: ", err.Error())
+		log.Fatalln("Config error: ", err.Error())
 	}
 
-	log.Printf("- config Payment address: %v", cfg.Payment_address)
+	log.Println("- config Payment address: ", cfg.Payment_address)
 	if len(cfg.Payment_address) == 0 {
 		log.Fatalln("Config variable Payment_address required.")
 	}
 
-	log.Printf("- config Min_payment: %v", cfg.Min_payment)
+	log.Println("- config Min_payment: ", cfg.Min_payment)
 	if cfg.Min_payment < 0 {
 		log.Fatalln("Invalid config variable Min_payment value.")
 	}
 
-	log.Printf("- config Electrum_port: %v", cfg.Electrum_port)
+	log.Println("- config Electrum_port: ", cfg.Electrum_port)
 	if len(cfg.Electrum_host) == 0 {
 		log.Fatalln("Config variable Electrum_host required.")
 	}
 
-	log.Printf("- config Electrum_host: %v", cfg.Electrum_host)
+	log.Println("- config Electrum_host: ", cfg.Electrum_host)
 	if cfg.Electrum_port == 0 || cfg.Electrum_port < 0 {
 		log.Fatalln("Config variable Electrum_port required.")
 	}
 
-	log.Printf("- config Tls_enabled: %v", cfg.Tls_enabled)
+	log.Println("- config Tls_enabled: ", cfg.Tls_enabled)
 	if cfg.Tls_enabled == true {
 		if len(cfg.Tls_cert) == 0 || len(cfg.Tls_key) == 0 {
 			log.Fatalln("Config variables Tls_cert and Tls_key required.")
 		}
+	} else {
+		log.Println("- config *Warning*: TLS/SSL not enabled. Set tls_enabled to true to enable TLS/SSL.")
 	}
 }
 
@@ -65,11 +67,11 @@ func setupServer() *gin.Engine {
 	if cfg.Tls_enabled {
 		conf := &tls.Config{}
 		if err = electrumServer.ConnectSSL(cfg.Electrum_host + ":" + portStr, conf); err != nil {
-			log.Fatal("Electrum connection error: ", err)
+			log.Fatalln("Electrum connection error: ", err.Error())
 		}
 	} else {
 		if err = electrumServer.ConnectTCP(cfg.Electrum_host + ":" + portStr); err != nil {
-			log.Fatal("Electrum connection error: ", err)
+			log.Fatalln("Electrum connection error: ", err.Error())
 		}
 	}
 
@@ -77,7 +79,8 @@ func setupServer() *gin.Engine {
 	go func() {
 		for {
 			if err = electrumServer.Ping(); err != nil {
-				log.Fatal("Electrum keep alive error: ", err)
+				// Log error, don't treat as fatal
+				log.Println("Electrum keep alive error: ", err.Error())
 			}
 			time.Sleep(60 * time.Second)
 		}
@@ -111,7 +114,7 @@ func main() {
 	// Setting log file
 	file, err := os.OpenFile("debug.log", os.O_CREATE|os.O_APPEND|os.O_WRONLY, 0644)
 	if err != nil {
-		log.Fatal(err)
+		log.Fatalln("Error creating log file: ", err.Error())
 	}
 
 	defer file.Close()
@@ -126,10 +129,8 @@ func main() {
 	portStr := strconv.Itoa(cfg.Electrum_port + 10)
 
 	if cfg.Tls_enabled == true {
-		log.Println("Using TLS/SSL")
 		router.RunTLS(":" + portStr, cfg.Tls_cert, cfg.Tls_key)
 	} else {
-		log.Println("**Warning: TLS/SSL not enabled. Set tls_enabled to true to enable TLS/SSL.")
 		router.Run(":" + portStr)
 	}
 	log.Println("Listening on port: " + portStr)
