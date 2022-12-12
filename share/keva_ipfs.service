@@ -1,0 +1,12 @@
+[Unit]
+Description=Keva IPFS
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/keva_ipfs
+ExecStart=/opt/keva_ipfs/keva_ipfs
+User=keva_ipfs
+Restart=on-failure
+
+[Install]
+WantedBy=multi-user.target
